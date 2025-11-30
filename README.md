@@ -1,0 +1,205 @@
+<!-- aeonlauncher:header -->
+<p align="center"><img src="./.github/social.png" alt="Aeon Launcher · Robinhood Chain" width="100%"></p>
+
+<p align="center"><a href="https://api.trenchy.tools/api/create-api-key">Get an API key</a> · <a href="https://api.trenchy.tools/AGENTS.md">API rules</a> · <a href="https://api.trenchy.tools/openapi.json">OpenAPI</a></p>
+
+# Aeon Launcher · Robinhood Chain
+
+**Launchpads**, picked on the Launch page: **pons** (curve → Uniswap v4, your buyers on the snipe-tax exempt list), **pools.trade**, **circus**, **Sushi** and **pools.fun**. Trading works on any of them: the API finds every coin's market.
+
+Aeon Launcher for launching on **pons** (Robinhood Chain, chain id 4663, native ETH) with the
+[launch API](https://api.trenchy.tools/AGENTS.md). One Next.js app, one process, one `npm run dev`.
+A sibling of the pump.fun starter: same theme, same wallet folder, EVM instead of Solana.
+
+## What it is
+
+- **Wallets**: one list, each wallet a file in `./wallets`. **+ New wallet** (× N) or **Import ▾** a 0x key; the first
+  one becomes ★, the main wallet that pays for everything and receives gathers (click ☆ to move it). Click a label to
+  rename. Per row **Fund** (from ★) and **Key**; tick rows for **Amount each · Fund from ★ · Fund via exchange ▾ · Gather
+  to ★** (each wallet sends its whole balance minus exactly the gas) **· Send ▾** (each wallet sends an amount, or
+  everything, to one address: ★, another wallet, or any address you paste; direct, no exchange) **· Export keys ·
+  Archive**. Results are toasts; API errors are shown verbatim.
+- **Launch**: name, symbol, image, socials, the dev wallet (★ unless changed), how many **first buyers** and **holder
+  wallets** with an amount each (every row a new wallet unless you pick one). The Cost card, a dry run that lists every API
+  call, then the launch with a live log of every hash and the Trading page opening on the coin.
+- **Trading**: every wallet in a row with **[amount] Buy** and **25 / 50 / 100 %** sell buttons that act at once; tick rows
+  to buy or sell across the selection or add a timed sell; the coin's trades live on the right.
+
+The app holds your keys and signs locally with [viem](https://viem.sh). It never talks to an RPC node or IPFS: the API
+builds every transaction (`POST /api/rh/trade-local`), tells the signer what the chain knows (`GET /api/rh/account`),
+broadcasts (`POST /api/rh/send`) and confirms (`GET /api/rh/tx/:hash`). No database, no login, no encryption layer:
+a local, single-user tool.
+
+
+## Tutorial: your first pons launch in 5 steps
+
+1. **Get a key** (one call, no account): `curl "https://api.trenchy.tools/api/create-api-key?label=me"` → paste the `apiKey` into `.env` as `LAUNCH_API_KEY`, then `npm install && npm run dev` and open http://localhost:3000.
+2. **Make a wallet.** Wallets → **+ New wallet**. The first one becomes ★ (the main wallet); its key is written to `./wallets` (inside the clone, git-ignored) before it shows up. Send it a little ETH on Robinhood Chain (copy the address from the row). 0.01 ETH is plenty for a first try.
+3. **Fill the coin in.** Launch → drop an image, type a name and a symbol. The image goes to IPFS by itself when you launch. There is no mint to pick: pons derives the address from the form, and the log shows it before anything is signed.
+4. **Pick the buys.** Dev buy (0.001–0.1 ETH chips), how many **First buyers** (0–16) and **Holder wallets** (0–10), an amount each. Every row is a *new wallet* unless you pick an existing one; the **Cost** card on the right shows the shortfall ★ will send. Press **Dry run** to run the create on a copy of the chain and see every API call.
+5. **Launch.** The button says what is missing until it says `Launch (x ETH)`. New wallets are created, ★ tops every buyer up, the create goes out, and the moment it confirms every first-buyer wallet buys at once (right after the create, not in the same block) and the **Trading** page opens on the coin: the GMGN chart, every wallet with its tokens, **25 / 50 / 100 %** sell buttons and timed sells.
+
+The dev wallet is a select in the Buys card (★ by default). Slippage and the funding switch are under **Advanced options**. **Auto-fill demo data** fills the whole form with an example coin and our logo.
+
+## 5-minute start
+
+```bash
+cd robinhood-launcher
+npm install
+cp .env.example .env
+curl "https://api.trenchy.tools/api/create-api-key?label=robinhood-launcher"   # → { "apiKey": "…" }, shown once
+# paste the key into .env as LAUNCH_API_KEY (or later in the app's Settings sheet)
+npm run dev
+```
+
+Open http://localhost:4102. The status dot in the top bar says whether the key is accepted (`GET /api/me`) and whether a ★
+wallet exists; click it for Settings. On **Wallets**, press **+ New wallet** (it becomes ★) and send it a little ETH on
+Robinhood Chain. Start with tiny sizes (0.001 ETH) and press **Dry run** before the first launch.
+
+## Where your keys are
+
+Every wallet is a JSON file in one folder:
+
+| Setting                     | Folder                                                        |
+| --------------------------- | ------------------------------------------------------------- |
+| `WALLET_BACKUP_DIR` set     | that folder                                                   |
+| otherwise, Desktop exists   | `./wallets` (inside the clone, git-ignored)                              |
+| otherwise                   | `~/aeonlauncher-wallets`                                      |
+
+Files are named `<date>-rh-<role>-<0xaddress>.json` and hold
+`{ publicKey, privateKey, chain: "rh", role, label, createdAt, app, note }`; every wallet is also one line in
+`wallets.csv` (with a `chain` column). The folder is shared with the pump.fun starter, which writes `chain: "sol"`
+files; this app lists only `chain: "rh"`. Its own state (settings incl. the ★ wallet as `mainWallet`, launch records)
+sits in `_app/robinhood-launcher/`; archived wallets' files move to `archived/` (keys kept, never used). `role` in a file is only
+a tag: launches take the wallets you tick, each with its own amount.
+
+The folder **is** the store. The app lists wallets by reading it, writes a file **before** a create or import returns,
+and refuses to fund, launch with, trade with or gather from any wallet whose file is missing
+(HTTP 409 `not_backed_up`). "Rewrite backups" restores missing files from `wallets.csv` and adds missing CSV lines.
+Back the folder up like you would a seed phrase: anyone with a file controls that wallet.
+
+## How a launch works on pons
+
+pons is an EVM launchpad with a bonding curve that graduates to a Uniswap v4 pool. Three things differ from Solana:
+
+1. **Signing needs chain data.** Before signing, the app reads `GET /api/rh/account?wallet=0x…` for `chainId`,
+   `pendingNonce`, `maxFeePerGas` and `maxPriorityFeePerGas`, takes the nonce once per wallet per batch and adds 1 per
+   transaction. Every API answer is an ordered list of `{ label, to, data, value, gas }`; each one is signed with
+   `account.signTransaction`, sent with `POST /api/rh/send { transaction }` and confirmed with `GET /api/rh/tx/:hash`.
+   An `approve` is confirmed before the transaction after it goes out.
+2. **No bundles, no Jito, no lookup tables.** The chain has a sequencer and no public mempool, so the app calls them
+   **first buyers**: the create goes out, and the moment `GET /api/rh/tx/:hash` says `success`, every first buyer's buy is sent at once,
+   each with its own nonce. Holders are spread over `holderWindowS` (snipers, staggered by `sniperGapMs`, exist in the API form only) with
+   jitter after `holderDelayS` (Settings).
+3. **Snipe tax.** pons taxes buys in the launch window unless the wallet is on the creator's exempt list. The create
+   call carries `tokenMetadata` and `exemptWallets` (up to 31); the app puts every first-buyer, sniper and holder wallet on
+   that list and warns when there are more than 31.
+
+The launch itself: image → `POST /api/ipfs` → `metadata.image`; `POST /api/rh/trade-local { wallet: dev, action:
+"create", tokenMetadata, amount, exemptWallets, slippage }` → `transactions[]` (create + fee) and `predicted.token`;
+sign and send in order; wait for `success`; then the buys (`POST /api/rh/trade-local { action: "buy", token:
+predicted.token, amount }` per wallet). The log shows every hash with its Blockscout link and the coin's pons page; the
+record lands in `_app/robinhood-launcher/launches.json`.
+
+**The Launch page** is two things: the coin (image, name, symbol) and the buys (dev buy; how many **first buyers** and
+**holder wallets**, an amount each, every row a *new wallet* unless you pick an existing one). Press **Launch**: the image
+goes to IPFS by itself (`POST /api/launch/image` → `POST /api/ipfs`), the new wallets are created (keys saved first), the
+★ wallet tops every short buyer up, the create goes out, and the moment it confirms the **Trading** page opens on the coin
+(`/trading?token=…&launch=<id>`) with the chart and your wallets while the holders keep buying. The dev wallet is a select
+in the Buys card; slippage and the funding switch sit under **Advanced options**.
+
+**Cost** (right-hand card, `POST /api/launch/plan`): per buy, ETH + the API's 0.5 % fee + a 0.0005 ETH gas reserve; the
+dev wallet adds the 0.0005 ETH pons launch fee; the shortfall is what ★ sends at launch (`fundFirst`, on by default;
+off = the run refuses when a wallet is short). **Dry run** runs the create transactions through `POST /api/rh/simulate`
+on a copy of the chain; nothing is sent. The run refuses before anything is built when a wallet file is missing or,
+after funding, any wallet is still short of ETH.
+
+**There is no vanity page.** On Solana a mint keypair can be ground for a suffix because the mint address is the
+keypair. On pons the token address is derived by CREATE2 from the whole create form (name, symbol, image, socials,
+creator, salt): editing anything moves it, and there is no cheap grind the API exposes. The address is known before
+you sign (`predicted.token`); that is as far as it goes.
+
+## Trading and timed sells
+
+Pick one of your launches or paste a token (a launch brings you here by itself: `/trading?token=…`). GMGN's candle chart
+sits under the header (`https://www.gmgn.cc/kline/robinhood/<token>`, their embeddable widget host; `open on GMGN` next
+to it). Every wallet is a row with its ETH, its tokens and their value
+(`GET /api/rh/balances`), then **[amount] Buy** and **25% · 50% · 100%** sell buttons that act at once; the result (or the
+API's error, verbatim) is a toast. A sell sends `amount: "50%"` (the API resolves it from the real balance) and the answer
+`[approve?] sell fee` goes out in order, the approve confirmed first. Tick rows for the bar: **Buy [x] each · Sell 25 / 50 /
+100 % of selected · Timed sell ▾** (*in N minutes sell X %*, kept in the server's memory with a countdown; a restart
+forgets them). **Live trades** on the right come from the API websocket (`wss://…/api/rh/data`, `subscribeTokenTrade`)
+with explicit `connecting… / no trades yet / N trades` states; your own wallets are flagged. The **Creator fees** row
+reads `GET /api/rh/creator-fees?wallet=&token=` (the creator's escrow balance plus what this coin's curve still holds:
+70 % of the curve fee and snipe tax, all of the creator tax) and **Claim** asks `trade-local` for
+`action: "collectCreatorFee"`, which answers `[sweep?] claim`; the app signs both with the creator wallet and sends
+them in order. Graduated coins were swept at graduation, so only the claim goes out.
+
+## The one file to copy
+
+[`lib/launch-api.ts`](lib/launch-api.ts) is the whole API client: one documented method per endpoint, `ApiError` with
+`status · code · hint · docs`, and `sendAll()` (account read → nonce run → send in order → confirm). It depends only on
+viem, takes the key in its constructor and runs in Node and in the browser alike; drop it into your own project with
+[`lib/core/evm.ts`](lib/core/evm.ts) (the signer) and [`lib/core/errors.ts`](lib/core/errors.ts) and you have everything this app
+uses. [`lib/wallets.ts`](lib/wallets.ts) is the folder store with the backup rule.
+
+Every error the API returns is shown exactly as returned: message, `code`, `hint`, docs link.
+
+## Build it with AI
+
+Paste this into your coding agent together with `https://api.trenchy.tools/AGENTS.md`:
+
+> Build a pons (Robinhood Chain) launch tool on the launch API. Read `https://api.trenchy.tools/AGENTS.md`
+> and `openapi.json` first; use only endpoints that exist there. `trade-local` returns unsigned EVM
+> transactions, sign them with viem using `GET /api/rh/account` for chainId, nonce and fees, send with
+> `POST /api/rh/send`, confirm with `GET /api/rh/tx/:hash`, in order; confirm an `approve` before the next one. Write
+> every generated wallet to a JSON file in a folder the user can find before it holds anything, and refuse to fund a
+> wallet without a file. Put every buyer on `exemptWallets` (≤ 31) of the create. Simulate with `POST /api/rh/simulate`
+> before the first real send and start with ≤ 0.001 ETH. Show every API error with its `code`, `hint` and `docs`.
+
+The code in `lib/` is the reference answer to that prompt.
+
+## Host it
+
+```bash
+docker build -t robinhood-launcher .
+docker run -p 3000:3000 -v pons-wallets:/data -e LAUNCH_API_KEY=… robinhood-launcher
+```
+
+The image is `node:24-slim` with Next's standalone output. `WALLET_BACKUP_DIR` is `/data/wallets`; mount a volume at
+`/data` or the wallet files vanish with the container. The app has no login: put it behind something that does before
+exposing it beyond localhost.
+
+## Hosted demo mode
+
+A hosted demo is this same app built in **demo mode**, so strangers can use it without anyone
+holding their keys:
+
+```bash
+NEXT_PUBLIC_DEMO=1 npm run build              # build-time flag: the pages talk to the in-browser engine
+DEMO_MODE=1 node .next/standalone/server.js   # runtime flag: every /api/* route answers 404 { code: "demo_mode" }
+```
+
+What differs from local mode (which is unchanged without the flags):
+
+- **Keys live in the visitor's browser** (`localStorage`, one entry per wallet, same shape as a wallet file). Signing happens in
+  the tab with viem: `GET /api/rh/account` (pendingNonce, fees, chainId) → `account.signTransaction` per transaction, nonce + 1
+  per transaction of a run → `POST /api/rh/send` → `GET /api/rh/tx/:hash`. The server keeps no state and serves no wallet route
+  ([`proxy.ts`](proxy.ts) → `demoGuard` in `lib/http.ts`).
+- **Backup first:** a new wallet is *not backed up* and cannot be funded, launched with, traded or gathered (`409 not_backed_up`)
+  until **Download backup** (top bar or Wallets page) has saved its key: one JSON file per click, with the CSV text inside it.
+  **Export all keys** downloads everything any time. Clearing the site's data deletes the keys.
+- **Each visitor gets their own API key**, created in the browser on the first visit (`GET /api/create-api-key?label=demo-pons`)
+  and kept in `localStorage`. Settings shows it masked, takes a pasted key, and shows the API's refusal verbatim when creation is
+  rate-limited. Every API call (and the live-trades websocket `wss://api.trenchy.tools/api/rh/data`) goes straight from the
+  browser to `https://api.trenchy.tools`.
+- **Launches and timed sells run in the tab**: keep it open. Timed sells are kept in `localStorage` and resume on reload.
+- A strict Content-Security-Policy is sent (`next.config.ts`): scripts from this origin only, network to this origin and the API only.
+
+How it is built: the pages call their routes through `appFetch` / `appEvents` ([`lib/browser/demo.ts`](lib/browser/demo.ts)).
+In demo mode those are answered by [`lib/browser/engine.ts`](lib/browser/engine.ts), which has the same routes and shapes and
+runs the same flows as the server ([`lib/core/*`](lib/core): launch executor, trading, funding, timers, the signer and its
+nonce run), on the browser key store ([`lib/browser/keystore.ts`](lib/browser/keystore.ts)) with viem keys
+([`lib/browser/signer-evm.ts`](lib/browser/signer-evm.ts)).
+
+MIT licensed.
