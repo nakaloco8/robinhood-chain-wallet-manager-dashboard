@@ -203,3 +203,13 @@ nonce run), on the browser key store ([`lib/browser/keystore.ts`](lib/browser/ke
 ([`lib/browser/signer-evm.ts`](lib/browser/signer-evm.ts)).
 
 MIT licensed.
+
+## Screenshots
+
+Launch page:
+
+![launch](.github/shot-launch.png)
+
+Trading page:
+
+![trading](.github/shot-trading.png)
