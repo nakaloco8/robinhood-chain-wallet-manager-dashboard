@@ -210,6 +210,10 @@ Launch page:
 
 ![launch](.github/shot-launch.png)
 
+Wallets page:
+
+![wallets](.github/shot-wallets.png)
+
 Trading page:
 
 ![trading](.github/shot-trading.png)
